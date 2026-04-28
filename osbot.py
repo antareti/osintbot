@@ -36,7 +36,6 @@ def is_email(text):
 def generate_elite_dossier(target):
     img = Image.new('RGB', (600, 350), color=(5, 5, 5))
     draw = ImageDraw.Draw(img)
-    # Формат РФ: буква, 3 цифры, 2 буквы, регион
     chars = "ABEKMHOPCTYX"
     car_id = f"{random.choice(chars)}{random.randint(100,999)}{random.choice(chars)}{random.choice(chars)} {random.choice(['77','99','777','197'])}"
     lat, lon = f"{random.uniform(55.5, 55.9):.6f}", f"{random.uniform(37.3, 37.8):.6f}"
@@ -63,10 +62,11 @@ async def cmd_start(message: types.Message):
     builder.row(types.InlineKeyboardButton(text="🔑 ВВЕСТИ КОД", callback_data="enter_code"))
     
     welcome = (
-        "👑 **INFEX OSINT v9.7**\n"
+        "👑 **INFEX OSINT v9.8**\n"
         "───────────────────────\n"
-        "✅ **БЕСПЛАТНО:** Введите IP, Email или пришлите Фото (как файл).\n"
-        "💎 **PREMIUM:** Спутниковый деанон по Нику (Карта + Госносмер РФ)."
+        "✅ **БЕСПЛАТНО:** IP, Email или Фото.\n"
+        "💎 **PREMIUM:** Спутниковый деанон по Нику.\n\n"
+        "Слушаю вас, мой господин."
     )
     await message.answer(welcome, parse_mode="Markdown", reply_markup=builder.as_markup())
 
@@ -78,43 +78,44 @@ async def ask_code(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(AuthState.waiting_for_code)
 async def check_code(message: types.Message, state: FSMContext):
-    if message.text == SECRET_CODE:
+    # Очищаем ввод от пробелов и приводим к нижнему регистру для надежности
+    user_code = message.text.strip().lower()
+    
+    if user_code == SECRET_CODE.lower():
         premium_users.add(message.from_user.id)
-        await message.answer("✅ **PREMIUM АКТИВИРОВАН!**\nТеперь поиск по нику доступен.")
+        await message.answer("✅ **PREMIUM АКТИВИРОВАН!**\nТеперь деанон по нику доступен навсегда.")
         await state.clear()
     else:
-        await message.answer("❌ Неверный код.")
+        await message.answer(f"❌ **НЕВЕРНЫЙ КОД.**\nВы ввели: `{user_code}`\nНужен правильный код. Купить: @softpack1977", parse_mode="Markdown")
+        await state.clear() # Сбрасываем состояние, чтобы можно было попробовать снова
 
 @dp.message(F.document)
 async def free_photo_analysis(message: types.Message):
-    # Фото всегда бесплатно
-    await message.answer("🔎 *Анализ метаданных фото завершен. Координаты скрыты владельцем.*", parse_mode="Markdown")
+    await message.answer("🔎 *Анализ метаданных фото...*\nРезультат: Местоположение скрыто провайдером.", parse_mode="Markdown")
 
 @dp.message()
 async def main_handler(message: types.Message):
+    if not message.text: return
     target = message.text.strip()
     user_id = message.from_user.id
 
-    # 1. Если это IP или Email - Бесплатно
     if is_ip(target) or is_email(target):
-        await message.answer(f"🌍 **ОТКРЫТЫЙ ПОИСК:** `{target}`\nРезультат: Данные найдены в публичных реестрах.", parse_mode="Markdown")
+        await message.answer(f"🌍 **ОТКРЫТЫЙ ПОИСК:** `{target}`\nРезультат: База данных подтверждает наличие цели.", parse_mode="Markdown")
     
-    # 2. Если это Ник и есть Премиум
     elif user_id in premium_users:
-        status = await message.answer("📡 **ПОДКЛЮЧЕНИЕ К СЕТИ ГЛОНАСС...**")
+        status = await message.answer("📡 **ПОДКЛЮЧЕНИЕ К СПУТНИКАМ...**")
         await asyncio.sleep(1)
         photo_path, lat, lon = generate_elite_dossier(target)
         kb = InlineKeyboardBuilder()
-        kb.row(types.InlineKeyboardButton(text="🗺 КАРТА РФ (LIVE)", url=f"https://www.google.com/maps?q={lat},{lon}"))
-        await message.answer_photo(types.FSInputFile(photo_path), caption=f"🎯 Объект `{target}` привязан к ТС.", reply_markup=kb.as_markup())
-        os.remove(photo_path)
+        kb.row(types.InlineKeyboardButton(text="🗺 КАРТА РФ", url=f"https://www.google.com/maps?q={lat},{lon}"))
+        await message.answer_photo(types.FSInputFile(photo_path), caption=f"🎯 Объект `{target}` под наблюдением.", reply_markup=kb.as_markup())
+        if os.path.exists(photo_path): os.remove(photo_path)
         await status.delete()
 
-    # 3. Если это Ник, но НЕТ Премиума
     else:
         builder = InlineKeyboardBuilder()
         builder.row(types.InlineKeyboardButton(text="💎 АКТИВИРОВАТЬ", callback_data="enter_code"))
-        await message.answer("🔒 **DEEP HACK ОГРАНИЧЕН**\nПоиск авто и GPS по нику доступен только в Premium.", reply_markup=builder.as_markup())
+        await message.answer("🔒 **ДОСТУП ОГРАНИЧЕН**\nПоиск по нику доступен только в Premium.", reply_markup=builder.as_markup())
 
 async def main():
     await dp.start_polling(bot)
